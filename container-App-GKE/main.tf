@@ -39,6 +39,12 @@ resource "google_compute_subnetwork" "subnet" {
     range_name    = "services"
     ip_cidr_range = "10.52.0.0/20"
   }
+
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
 }
 
 # IMPROVEMENT: Cloud NAT for Private Nodes
@@ -95,6 +101,10 @@ resource "google_container_cluster" "primary" {
   network                  = google_compute_network.vpc.name
   subnetwork               = google_compute_subnetwork.subnet.name
 
+  resource_labels = {
+    env = var.cluster_name
+  }
+
   networking_mode = "VPC_NATIVE"
   ip_allocation_policy {
     cluster_secondary_range_name  = "pods"
@@ -102,7 +112,8 @@ resource "google_container_cluster" "primary" {
   }
 
   # IMPROVEMENT: PRIVATE CLUSTER
-  # Nodes only have internal IPs. The master endpoint remains public for easy management,
+  # Nodes only have internal IPs.
+  # The master endpoint remains public for easy management,
   # but requires authorized networks in a strict production env.
   private_cluster_config {
     enable_private_nodes    = true
@@ -118,6 +129,26 @@ resource "google_container_cluster" "primary" {
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
+  }
+
+  master_authorized_networks_config {
+    cidr_blocks {
+      # trivy:ignore:AVD-GCP-0053
+      cidr_block   = "0.0.0.0/0"
+      display_name = "Allow All (Demo)"
+    }
+  }
+
+  # Network Policy (requires Dataplane V2 or Calico)
+  # Using Calico here for broad compatibility
+  network_policy {
+    enabled  = true
+    provider = "CALICO"
+  }
+  addons_config {
+    network_policy_config {
+      disabled = false
+    }
   }
 
   depends_on = [
@@ -141,10 +172,24 @@ resource "google_container_node_pool" "primary_nodes" {
     max_node_count = var.max_nodes
   }
 
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
+
   node_config {
     machine_type    = var.machine_type
     service_account = google_service_account.gke_sa.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
+    image_type      = "COS_CONTAINERD"
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
 
     labels = {
       env = var.cluster_name

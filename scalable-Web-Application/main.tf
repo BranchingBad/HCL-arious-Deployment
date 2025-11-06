@@ -48,6 +48,12 @@ resource "google_compute_subnetwork" "app_subnet" {
   ip_cidr_range = "10.0.1.0/24"
   region        = var.region
   network       = google_compute_network.vpc_network.id
+
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
 }
 
 resource "google_compute_router" "router" {
@@ -145,7 +151,6 @@ resource "google_compute_region_instance_group_manager" "web_mig" {
     minimal_action        = "REPLACE"
     max_surge_fixed       = 3
     max_unavailable_fixed = 0
-    min_ready_sec         = 30
   }
 }
 

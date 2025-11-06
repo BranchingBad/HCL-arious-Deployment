@@ -1,9 +1,13 @@
 repos:
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.83.0 # Get the latest version from GitHub releases
+    rev: v1.88.0
     hooks:
       - id: terraform_fmt
-      # Optional: Add other useful hooks here
-      # - id: terraform_validate
-      # - id: terraform_tflint
-      # - id: terraform_docs_without_aggregate_type_defaults
+      - id: terraform_validate
+      - id: terraform_tflint
+        args:
+          - "--args=--config=__GIT_WORKING_DIR__/.tflint.hcl"
+      - id: terraform_docs
+        args:
+          - "--args=--lockfile=false"
+      - id: terraform_trivy

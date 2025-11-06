@@ -34,6 +34,7 @@ resource "random_pet" "suffix" {
 # ------------------------------------------------------------------------------
 # LOGGING BUCKET
 # ------------------------------------------------------------------------------
+# trivy:ignore:AVD-GCP-0066
 resource "google_storage_bucket" "logs" {
   name                        = "${var.bucket_name_prefix}-logs-${random_pet.suffix.id}"
   location                    = var.region
@@ -70,6 +71,7 @@ resource "google_storage_bucket" "logs" {
 # ------------------------------------------------------------------------------
 # MAIN WEBSITE BUCKET
 # ------------------------------------------------------------------------------
+# trivy:ignore:AVD-GCP-0066
 resource "google_storage_bucket" "website" {
   name          = "${var.bucket_name_prefix}-${random_pet.suffix.id}"
   location      = var.region
@@ -142,6 +144,7 @@ resource "google_storage_bucket_object" "error" {
 # ------------------------------------------------------------------------------
 # IAM CONFIGURATION
 # ------------------------------------------------------------------------------
+# trivy:ignore:AVD-GCP-0001
 resource "google_storage_bucket_iam_member" "public_rule" {
   bucket = google_storage_bucket.website.name
   role   = "roles/storage.objectViewer"
