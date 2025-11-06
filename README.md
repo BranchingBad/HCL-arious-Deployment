@@ -4,5 +4,5 @@ A collection of Terraform projects for deploying various infrastructure patterns
 
 ## Projects
 - **Static Website:** Deploys a static website using Google Cloud Storage and Cloud DNS.
-- **Scalable Web Application:** Deploys a VPC and subnet for a scalable web application using Google Compute Engine.
-- **Containerized App on GKE:** Provisions a Google Kubernetes Engine (GKE) cluster for deploying containerized applications.
+- **Scalable Web Application:** Deploys a load-balanced web application using a Managed Instance Group, External HTTP Load Balancer, and Google Compute Engine.
+- **Containerized App on GKE:** Provisions a high-availability, regional Google Kubernetes Engine (GKE) cluster with a managed node pool, ready for containerized workloads.
