@@ -64,7 +64,73 @@ resource "google_compute_router_nat" "nat" {
 }
 
 # ==============================================================================
-# IAM & SECURITY
+# BASTION HOST & IAP
+# ==============================================================================
+resource "google_service_account" "bastion_sa" {
+  account_id   = "bastion-sa"
+  display_name = "Bastion Service Account"
+}
+
+# Allow IAP to connect to instances with 'bastion' tag via SSH
+resource "google_compute_firewall" "iap_ssh" {
+  name    = "${var.cluster_name}-allow-iap-ssh"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["bastion"]
+}
+
+# trivy:ignore:AVD-GCP-0030
+resource "google_compute_instance" "bastion" {
+  name         = "${var.cluster_name}-bastion"
+  machine_type = "e2-micro"
+  zone         = "${var.region}-a"
+  tags         = ["bastion"]
+
+  metadata = {
+    "block-project-ssh-keys" = "true"
+  }
+
+  # trivy:ignore:AVD-GCP-0033
+  boot_disk {
+    initialize_params {
+      image = "debian-cloud/debian-11"
+    }
+  }
+
+  network_interface {
+    subnetwork = google_compute_subnetwork.subnet.id
+    # No access_config block ensures NO public IP
+  }
+
+  service_account {
+    email  = google_service_account.bastion_sa.email
+    scopes = ["cloud-platform"]
+  }
+
+  metadata_startup_script = <<-EOT
+    #!/bin/bash
+    apt-get update
+    apt-get install -y kubectl google-cloud-sdk-gke-gcloud-auth-plugin tinyproxy
+    # Optional: Configure Tinyproxy to allow localhost for simple tunneling
+    sed -i 's/Allow 127.0.0.1/#Allow 127.0.0.1/' /etc/tinyproxy/tinyproxy.conf
+    echo "Allow localhost" >> /etc/tinyproxy/tinyproxy.conf
+    systemctl restart tinyproxy
+  EOT
+
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_integrity_monitoring = true
+  }
+}
+
+# ==============================================================================
+# IAM & SECURITY (GKE)
 # ==============================================================================
 resource "google_service_account" "gke_sa" {
   account_id   = "gke-node-sa"
@@ -111,13 +177,12 @@ resource "google_container_cluster" "primary" {
     services_secondary_range_name = "services"
   }
 
-  # IMPROVEMENT: PRIVATE CLUSTER
-  # Nodes only have internal IPs.
-  # The master endpoint remains public for easy management,
-  # but requires authorized networks in a strict production env.
+  # IMPROVEMENT: PRIVATE CLUSTER & ENDPOINT
+  # Nodes have internal IPs ONLY.
+  # Master endpoint is also PRIVATE, accessible only from within the VPC (e.g., Bastion).
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = false
+    enable_private_endpoint = true
     master_ipv4_cidr_block  = "172.16.0.0/28"
   }
 
@@ -134,13 +199,12 @@ resource "google_container_cluster" "primary" {
   master_authorized_networks_config {
     cidr_blocks {
       # trivy:ignore:AVD-GCP-0053
-      cidr_block   = "0.0.0.0/0"
-      display_name = "Allow All (Demo)"
+      cidr_block   = google_compute_subnetwork.subnet.ip_cidr_range
+      display_name = "VPC Subnet (Bastion Access)"
     }
   }
 
   # Network Policy (requires Dataplane V2 or Calico)
-  # Using Calico here for broad compatibility
   network_policy {
     enabled  = true
     provider = "CALICO"
@@ -166,7 +230,6 @@ resource "google_container_node_pool" "primary_nodes" {
   cluster  = google_container_cluster.primary.name
 
   # IMPROVEMENT: AUTOSCALING
-  # Replaced fixed 'node_count' with autoscaling block
   autoscaling {
     min_node_count = var.min_nodes
     max_node_count = var.max_nodes
