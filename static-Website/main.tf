@@ -94,7 +94,7 @@ resource "google_storage_bucket" "website" {
   }
 
   cors {
-    origin          = ["*"]
+    origin = ["*"]
     # IMPROVEMENT: Tightened methods to only what is typically needed for static assets
     method          = ["GET", "HEAD"]
     response_header = ["*"]
@@ -126,20 +126,24 @@ resource "google_storage_bucket" "website" {
 # ------------------------------------------------------------------------------
 # IMPROVEMENT: Uploads a basic index.html so the site works immediately upon apply.
 resource "google_storage_bucket_object" "index" {
-  name    = "index.html"
-  bucket  = google_storage_bucket.website.name
-  content = "<html><body><h1>Hello, World!</h1><p>Deployed via Terraform.</p></body></html>"
+  name         = "index.html"
+  bucket       = google_storage_bucket.website.name
+  content      = "<html><body><h1>Hello, World!</h1><p>Deployed via Terraform.</p></body></html>"
   content_type = "text/html"
 }
 
 resource "google_storage_bucket_object" "error" {
-  name    = "404.html"
-  bucket  = google_storage_bucket.website.name
-  content = "<html><body><h1>404 - Not Found</h1></body></html>"
+  name         = "404.html"
+  bucket       = google_storage_bucket.website.name
+  content      = "<html><body><h1>404 - Not Found</h1></body></html>"
   content_type = "text/html"
 }
 
 # ------------------------------------------------------------------------------
 # IAM CONFIGURATION
 # ------------------------------------------------------------------------------
-resource "google_storage_bucket_iam_member"
+resource "google_storage_bucket_iam_member" "public_rule" {
+  bucket = google_storage_bucket.website.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
+}
