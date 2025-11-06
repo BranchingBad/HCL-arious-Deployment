@@ -1,4 +1,10 @@
 terraform {
+  # BACKEND CONFIGURATION: Replace placeholder with your actual state bucket name
+  backend "gcs" {
+    bucket = "YOUR_TERRAFORM_STATE_BUCKET"
+    prefix = "terraform/state/static-website"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -11,52 +17,71 @@ terraform {
   }
 }
 
-variable "project_id" {
-  description = "The GCP project ID."
-  type        = string
-}
-
-variable "region" {
-  description = "The region to deploy the resources in."
-  type        = string
-  default     = "US"
-}
-
-variable "bucket_name_prefix" {
-  description = "Prefix for the GCS bucket name. A random suffix will be appended."
-  type        = string
-  default     = "resume-website"
+provider "google" {
+  project = var.project_id
+  region  = var.region
 }
 
 resource "random_pet" "suffix" {
   length = 2
 }
 
+# ------------------------------------------------------------------------------
+# LOGGING BUCKET
+# ------------------------------------------------------------------------------
+# A separate bucket to store access logs for the website.
+resource "google_storage_bucket" "logs" {
+  name          = "${var.bucket_name_prefix}-logs-${random_pet.suffix.id}"
+  location      = var.region
+  force_destroy = true
+  uniform_bucket_level_access = true
+
+  # Automatically delete logs older than 30 days to save costs
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
+# ------------------------------------------------------------------------------
+# MAIN WEBSITE BUCKET
+# ------------------------------------------------------------------------------
 resource "google_storage_bucket" "website" {
-  # Bucket names must be globally unique. We append a random pet name to the prefix.
   name          = "${var.bucket_name_prefix}-${random_pet.suffix.id}"
   location      = var.region
-  project       = var.project_id
   force_destroy = true
+
+  # Enable uniform bucket-level access for better security management
+  uniform_bucket_level_access = true
+
+  # Enable versioning to recover from accidental overwrites/deletes
+  versioning {
+    enabled = true
+  }
+
+  # Configure access logging to the logs bucket created above
+  logging {
+    log_bucket        = google_storage_bucket.logs.name
+    log_object_prefix = "website-access/"
+  }
 
   website {
     main_page_suffix = "index.html"
     not_found_page   = "404.html"
   }
-
-  # Uniform bucket-level access is recommended for new buckets.
-  uniform_bucket_level_access = true
 }
 
-resource "google_storage_bucket_iam_binding" "public_rule" {
+# ------------------------------------------------------------------------------
+# IAM CONFIGURATION
+# ------------------------------------------------------------------------------
+# Makes the bucket content publicly readable.
+# Uses 'google_storage_bucket_iam_member' for non-authoritative updates.
+resource "google_storage_bucket_iam_member" "public_rule" {
   bucket = google_storage_bucket.website.name
   role   = "roles/storage.objectViewer"
-  members = [
-    "allUsers",
-  ]
-}
-
-output "website_url" {
-  description = "The URL of the static website."
-  value       = "https://storage.googleapis.com/${google_storage_bucket.website.name}/"
+  member = "allUsers"
 }
