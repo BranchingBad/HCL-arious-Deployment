@@ -1,15 +1,16 @@
 output "cluster_name" {
-  description = "GKE Cluster Name"
+  description = "The name of the GKE cluster."
   value       = google_container_cluster.primary.name
 }
 
 output "cluster_endpoint" {
-  description = "The public endpoint of the GKE cluster."
+  description = "The public endpoint of the GKE cluster's master."
   value       = google_container_cluster.primary.endpoint
   sensitive   = true
 }
 
-output "get_credentials_command" {
-  description = "Command to configure kubectl."
-  value       = "gcloud container clusters get-credentials ${google_container_cluster.primary.name} --region ${var.region} --project ${var.project_id}"
+output "kubeconfig" {
+  description = "A command to configure kubectl for this cluster."
+  value       = "gcloud container clusters get-credentials ${google_container_cluster.primary.name} --region ${google_container_cluster.primary.location} --project ${var.project_id}"
+  sensitive   = true
 }
